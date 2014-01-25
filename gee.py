@@ -47,6 +47,7 @@ if playerpath == '':
 	exit(1)
 
 args.append('-slave')
+args.append('-quiet')
 
 print '[gee] using ' + repr(playerpath) + ' as player'
 print ''
@@ -55,8 +56,11 @@ player = subprocess.Popen([playerpath] + args, stderr=-1, stdin=-1, stdout=-1)
 
 def wf(stream, text):
 	""" Writes and flushes a stream """
-	stream.write(text + '\n')
-	stream.flush
+	try:
+		stream.write(text + '\n')
+		stream.flush
+	except:
+		pass
 
 ITC = {'recording': False, 'exit': exit, 'key': key, 'playing': True, 'begin': .0, 'end': .0}
 
@@ -76,7 +80,7 @@ def stderr_handle(player, itc):
 				itc['recording'] = False
 
 				wf(player.stdin, 'osd 1')
-				wf(player.stdin, 'osd_show_text "GIF recording ended" 1000 1')
+				wf(player.stdin, 'osd_show_text "GIF recording ended, saving..." 1000 1')
 				wf(player.stdin, 'get_time_pos')
 		else:
 			if tmp.replace('\n', '') != '':
@@ -90,20 +94,21 @@ def stderr_handle(player, itc):
 def stdout_handle(player, itc):
 	while True:
 		tmp = player.stdout.readline()
-		if tmp.startswith('ANS_TIME_POSITION'):
+		if tmp.replace('\n', '').startswith('ANS_TIME_POSITION'):
 			if itc['recording']:
-				itc['begin'] = float(tmp.split('=')[1])
+				itc['begin'] = float(tmp.split('=')[1].replace('\n', ''))
 			else:
-				itc['end'] = float(tmp.split('=')[1])
-				print '[gee] total gif time: ' + str(itc['end'] - itc['begin']) + 's'
+				itc['end'] = float(tmp.split('=')[1].replace('\n', ''))
+				print '[gee] total gif time: ' + str(itc['end'] - itc['begin']) + 's (' + str(itc['end']) + ' - ' + str(itc['begin']) + ')'
 				wf(player.stdin, 'get_file_name')
-		elif tmp.startswith('ANS_FILENAME'):
+		elif tmp.replace('\n', '').startswith('ANS_FILENAME'):
 			filename = eval(tmp.split('=')[1])
+			saveto = str(time.time()) + '.gif'
 
 			#here we record
-			VideoFileClip(filename).subclip(itc['begin'], itc['end']).resize(0.3).to_gif(filename + '_[' + str(itc['begin']) + ' - ' + str(itc['end']) + '].gif')
+			VideoFileClip(filename).subclip(itc['begin'], itc['end']).resize(0.3).to_gif(saveto)
 			wf(player.stdin, 'osd 1')
-			wf(player.stdin, 'osd_show_text "Saved to \''+ filename + '_[' + str(itc['begin']) + ' - ' + str(itc['end']) + '].gif' +'\'" 1000 1')
+			wf(player.stdin, 'osd_show_text "Saved to \'' + saveto + '\'" 2000 1')
 		else:
 			if not tmp.startswith('A: '):
 				sys.stdout.write(tmp)
